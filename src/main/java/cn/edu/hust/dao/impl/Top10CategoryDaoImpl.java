@@ -12,7 +12,7 @@ public class Top10CategoryDaoImpl implements Top10CategoryDao {
     public void insert(Top10Category top10Category) {
         String sql="insert into top10_category values(?,?,?,?,?)";
         Object[] params=new Object[]{
-                top10Category.getTaskId(),top10Category.getCategoryId(),top10Category.getCategoryId(),
+                top10Category.getTaskId(),top10Category.getCategoryId(),
                 top10Category.getClickCount(),top10Category.getOrderCount(),top10Category.getPayCount()
         };
         JDBCHelper.getInstance().excuteUpdate(sql,params);
@@ -32,5 +32,12 @@ public class Top10CategoryDaoImpl implements Top10CategoryDao {
         }
 
         JDBCHelper.getInstance().excuteBatch(sql,paramList);
+    }
+
+    @Override
+    public void deleteByTaskId(Long taskId) {
+        String sql = "delete from top10_category where task_id = ?";
+        Object[] params = new Object[]{taskId};
+        JDBCHelper.getInstance().excuteUpdate(sql, params);
     }
 }

@@ -17,8 +17,8 @@ public class SessionAggrStatDaoImpl implements SessionAggrStatDao{
                 sessionAggrStat.getVisit_Length_1m_3m(),sessionAggrStat.getVisit_Length_3m_10m()
                 ,sessionAggrStat.getVisit_Length_10m_30m(),sessionAggrStat.getVisit_Length_30m(),
                 sessionAggrStat.getStep_Length_1_3(),sessionAggrStat.getStep_Length_4_6(),sessionAggrStat.getStep_Length_7_9(),
-                sessionAggrStat.getStep_Length_7_9(),sessionAggrStat.getStep_Length_10_30(),
-                sessionAggrStat.getStep_Length_30_60()};
+                sessionAggrStat.getStep_Length_10_30(), sessionAggrStat.getStep_Length_30_60(),
+                sessionAggrStat.getStep_Length_60()};
         JDBCHelper.getInstance().excuteUpdate(sql,params);
     }
 
@@ -34,10 +34,16 @@ public class SessionAggrStatDaoImpl implements SessionAggrStatDao{
                     sessionAggrStat.getVisit_Length_1m_3m(),sessionAggrStat.getVisit_Length_3m_10m()
                     ,sessionAggrStat.getVisit_Length_10m_30m(),sessionAggrStat.getVisit_Length_30m(),
                     sessionAggrStat.getStep_Length_1_3(),sessionAggrStat.getStep_Length_4_6(),sessionAggrStat.getStep_Length_7_9(),
-                    sessionAggrStat.getStep_Length_7_9(),sessionAggrStat.getStep_Length_10_30(),
-                    sessionAggrStat.getStep_Length_30_60()};
+                    sessionAggrStat.getStep_Length_10_30(), sessionAggrStat.getStep_Length_30_60(),
+                    sessionAggrStat.getStep_Length_60()};
             paramList.add(params);
         }
         JDBCHelper.getInstance().excuteBatch(sql,paramList);
+    }
+    @Override
+    public void deleteByTaskId(Long taskId) {
+        String sql = "delete from session_aggr_stat where task_id = ?";
+        Object[] params = {taskId};
+        JDBCHelper.getInstance().excuteUpdate(sql, params);
     }
 }

@@ -5,7 +5,7 @@ import java.io.Serializable;
 public class SessionDetail implements Serializable{
     private Long taskId;
     private Long userId;
-    private String sessinId;
+    private String sessionId;
     private Long pageid;
     private String actionTime;
     private String searchKeyWord;
@@ -19,10 +19,10 @@ public class SessionDetail implements Serializable{
     public SessionDetail() {
     }
 
-    public void set(Long taskId, Long userId, String sessinId, Long pageid, String actionTime, String searchKeyWord, Long clickCategoryId, Long clickProductId, String orderCategoryIds, String orderProductIds, String payCategoryIds, String payProductIds) {
+    public void set(Long taskId, Long userId, String sessionId, Long pageid, String actionTime, String searchKeyWord, Long clickCategoryId, Long clickProductId, String orderCategoryIds, String orderProductIds, String payCategoryIds, String payProductIds) {
         this.taskId = taskId;
         this.userId = userId;
-        this.sessinId = sessinId;
+        this.sessionId = sessionId;
         this.pageid = pageid;
         this.actionTime = actionTime;
         this.searchKeyWord = searchKeyWord;
@@ -50,13 +50,14 @@ public class SessionDetail implements Serializable{
         this.userId = userId;
     }
 
-    public String getSessinId() {
-        return sessinId;
+    public String getSessionId() {
+        return sessionId;
     }
 
-    public void setSessinId(String sessinId) {
-        this.sessinId = sessinId;
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
+
 
     public Long getPageid() {
         return pageid;

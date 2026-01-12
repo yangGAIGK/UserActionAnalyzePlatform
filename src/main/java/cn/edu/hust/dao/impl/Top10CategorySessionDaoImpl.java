@@ -21,4 +21,11 @@ public class Top10CategorySessionDaoImpl implements Top10CategorySessionDao
         }
         JDBCHelper.getInstance().excuteBatch(sql,paramList);
     }
+
+    @Override
+    public void deleteByTaskId(Long taskId) {
+        String sql = "delete from top10_category_session where task_id = ?";
+        Object[] params = new Object[]{taskId};
+        JDBCHelper.getInstance().excuteUpdate(sql, params);
+    }
 }

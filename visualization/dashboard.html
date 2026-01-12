@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电商用户行为分析大数据平台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #020617;
+            color: #e2e8f0;
+            overflow: hidden;
+        }
+
+        .tech-border {
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.1);
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+        }
+
+        .tech-text-glow {
+            text-shadow: 0 0 5px rgba(34, 211, 238, 0.5);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col p-4 gap-4 bg-[url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop')] bg-cover bg-center bg-no-repeat bg-blend-overlay bg-slate-900/90">
+
+    <header class="h-16 flex items-center justify-center shrink-0 tech-border rounded-lg relative overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-500/10 to-transparent"></div>
+        <h1 class="text-3xl font-bold text-cyan-400 tracking-wider uppercase tech-text-glow z-10">电商用户行为分析大数据平台</h1>
+        <div class="absolute right-4 text-cyan-200/70 text-sm font-mono" id="clock">Loading...</div>
+    </header>
+
+    <main class="flex-1 grid grid-cols-12 grid-rows-3 gap-4 min-h-0 overflow-hidden">
+        
+        <div class="col-span-4 row-span-1 tech-border rounded-lg p-4 flex flex-col">
+            <h2 class="text-xl font-semibold text-cyan-300 mb-2 flex items-center">
+                <span class="inline-block w-2 h-6 bg-cyan-500 mr-2 rounded-sm"></span>
+                Session 访问时长占比
+            </h2>
+            <div id="sessionChart" class="flex-1 w-full min-h-0"></div>
+        </div>
+
+        <!-- 合并后的 热门品类分析 (可展开) -->
+        <div class="col-span-8 row-span-2 tech-border rounded-lg p-4 flex flex-col">
+            <h2 class="text-xl font-semibold text-cyan-300 mb-2 flex items-center">
+                <span class="inline-block w-2 h-6 bg-purple-500 mr-2 rounded-sm"></span>
+                热门品类全景分析 (点击展开明细)
+            </h2>
+            <div class="flex-1 overflow-auto min-h-0 bg-slate-900/50 rounded-lg">
+                <table class="w-full text-left text-sm border-collapse">
+                    <thead class="bg-cyan-900/40 text-cyan-400 sticky top-0 z-10 backdrop-blur-sm">
+                        <tr>
+                            <th class="p-3 w-12"></th> <!-- 展开按钮列 -->
+                            <th class="p-3">排名</th>
+                            <th class="p-3">品类ID</th>
+                            <th class="p-3 text-right">点击</th>
+                            <th class="p-3 text-right">下单</th>
+                            <th class="p-3 text-right">支付</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-cyan-800/20" id="nestedTableBody">
+                        <!-- 动态生成 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="col-span-4 row-span-1 tech-border rounded-lg p-4 flex flex-col">
+            <h2 class="text-xl font-semibold text-cyan-300 mb-2 flex items-center">
+                <span class="inline-block w-2 h-6 bg-blue-500 mr-2 rounded-sm"></span>
+                Session 访问步长占比
+            </h2>
+            <div id="stepChart" class="flex-1 w-full min-h-0"></div>
+        </div>
+
+        <div class="col-span-4 row-span-1 tech-border rounded-lg p-4 flex flex-col">
+            <h2 class="text-xl font-semibold text-cyan-300 mb-2 flex items-center">
+                <span class="inline-block w-2 h-6 bg-green-500 mr-2 rounded-sm flash-animation"></span>
+                用户行为实时回放 (Live Actions)
+            </h2>
+            <div id="actionStream" class="flex-1 w-full min-h-0 overflow-hidden relative bg-black/40 rounded p-2 font-mono text-xs">
+                <style>
+                    .flash-animation { animation: flash 1.5s infinite; }
+                    @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+                    .log-item { transition: all 0.5s; border-left: 2px solid transparent; padding-left: 8px; margin-bottom: 4px; }
+                    .log-item:hover { border-left-color: #22d3ee; background: rgba(34, 211, 238, 0.1); }
+                </style>
+                <!-- Log items will be injected here -->
+            </div>
+        </div>
+
+        <!-- 随机抽样 Session -->
+        <div class="col-span-8 row-span-1 tech-border rounded-lg p-4 flex flex-col">
+            <h2 class="text-xl font-semibold text-cyan-300 mb-2 flex items-center">
+                <span class="inline-block w-2 h-6 bg-orange-500 mr-2 rounded-sm"></span>
+                随机抽样 Lucky Session 行为轨迹
+            </h2>
+            <div class="flex-1 overflow-auto min-h-0">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-cyan-900/30 text-cyan-400 sticky top-0">
+                        <tr>
+                            <th class="p-2 w-32">Session ID</th>
+                            <th class="p-2 w-40">开始时间</th>
+                            <th class="p-2">搜索关键词</th>
+                            <th class="p-2">点击品类ID集合</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-cyan-800/30" id="randomSessionBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = "http://localhost:8080/api/stats";
+        const TASK_ID = 1; // 默认展示 taskId 为 1 的结果
+
+        // --- 时钟 ---
+        setInterval(() => {
+            document.getElementById('clock').innerText = new Date().toLocaleString('zh-CN');
+        }, 1000);
+
+        const themeColor = '#94a3b8';
+        const axisLineColor = '#334155';
+        const splitLineColor = '#1e293b';
+
+        // 1. 获取并渲染 Session 访问时长占比 (Pie Chart)
+        const sessionChart = echarts.init(document.getElementById('sessionChart'));
+        function loadSessionRatio() {
+            fetch(`${API_BASE}/session-ratio?taskId=${TASK_ID}`)
+                .then(res => res.json())
+                .then(data => {
+                    const option = {
+                        tooltip: { trigger: 'item' },
+                        legend: { orient: 'vertical', right: 10, top: 'center', textStyle: { color: themeColor } },
+                        series: [{
+                            name: '访问时长',
+                            type: 'pie',
+                            radius: ['40%', '70%'],
+                            center: ['35%', '50%'],
+                            itemStyle: { borderRadius: 5, borderColor: '#0f172a', borderWidth: 2 },
+                            label: { show: false },
+                            data: data // 使用后端返回的 [{name, value}] 格式
+                        }]
+                    };
+                    sessionChart.setOption(option);
+                });
+        }
+
+        // 2. 获取并渲染 嵌套的 热门品类分析 (Accordion Table)
+        function loadNestedTop10() {
+            fetch(`${API_BASE}/top10-nested?taskId=${TASK_ID}`)
+                .then(res => res.json())
+                .then(data => {
+                    const tbody = document.getElementById('nestedTableBody');
+                    tbody.innerHTML = ''; 
+                    data.forEach((item, index) => {
+                        const rowId = `row-${index}`;
+                        const detailId = `detail-${index}`;
+                        const rankClass = index < 3 ? 'text-yellow-400 font-bold' : 'text-cyan-400';
+
+                        // 主行 (Category Info)
+                        const mainTr = document.createElement('tr');
+                        mainTr.className = 'hover:bg-cyan-800/30 transition-colors cursor-pointer group';
+                        mainTr.innerHTML = `
+                            <td class="p-3 text-center">
+                                <button onclick="toggleDetail('${detailId}', this)" class="w-6 h-6 flex items-center justify-center rounded bg-cyan-900/50 text-cyan-300 hover:bg-cyan-700 transition-all transform group-hover:scale-110">
+                                    +
+                                </button>
+                            </td>
+                            <td class="p-3 ${rankClass}">#${index + 1}</td>
+                            <td class="p-3 text-white font-mono text-lg">${item.categoryId}</td>
+                            <td class="p-3 text-right text-gray-300">${item.clickCount.toLocaleString()}</td>
+                            <td class="p-3 text-right text-gray-400">${item.orderCount.toLocaleString()}</td>
+                            <td class="p-3 text-right text-cyan-300 font-mono">${item.payCount.toLocaleString()}</td>
+                        `;
+                        tbody.appendChild(mainTr);
+
+                        // 子行 (Detail Table - Hidden by default)
+                        const detailTr = document.createElement('tr');
+                        detailTr.id = detailId;
+                        detailTr.className = 'hidden bg-slate-900/80';
+                        
+                        // 构建子表内容
+                        let sessionRows = '';
+                        if (item.sessions && item.sessions.length > 0) {
+                            sessionRows = item.sessions.map((sess, idx) => `
+                                <tr class="border-b border-white/5 last:border-0 hover:bg-white/5">
+                                    <td class="p-2 text-gray-500 w-16 text-center">${idx + 1}</td>
+                                    <td class="p-2 text-cyan-200 font-mono text-xs break-all">${sess.sessionId}</td>
+                                    <td class="p-2 text-right text-pink-400 font-mono">${sess.clickCount}</td>
+                                </tr>
+                            `).join('');
+                        } else {
+                            sessionRows = '<tr><td colspan="3" class="p-4 text-center text-gray-500">该品类下暂无热门 Session 数据</td></tr>';
+                        }
+
+                        detailTr.innerHTML = `
+                            <td colspan="6" class="p-0">
+                                <div class="p-4 bg-gradient-to-b from-slate-900/50 to-cyan-900/10 border-y border-cyan-500/10 shadow-inner">
+                                    <h4 class="text-sm font-semibold text-pink-400 mb-3 flex items-center">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-pink-500 mr-2"></span>
+                                        品类 ${item.categoryId} - 活跃 Session Top 10
+                                    </h4>
+                                    <table class="w-full text-left text-sm bg-black/20 rounded overflow-hidden">
+                                        <thead class="text-xs text-gray-500 bg-black/40 uppercase">
+                                            <tr>
+                                                <th class="p-2 text-center">Rank</th>
+                                                <th class="p-2">Session ID</th>
+                                                <th class="p-2 text-right">活跃度 (Click)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${sessionRows}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        `;
+                        tbody.appendChild(detailTr);
+                    });
+                });
+        }
+
+        // Toggle Expand Function
+        function toggleDetail(detailId, btn) {
+            const detailRow = document.getElementById(detailId);
+            const isHidden = detailRow.classList.contains('hidden');
+            
+            if (isHidden) {
+                detailRow.classList.remove('hidden');
+                btn.innerText = '-';
+                btn.classList.add('bg-pink-500/20', 'text-pink-300');
+                btn.classList.remove('bg-cyan-900/50', 'text-cyan-300');
+            } else {
+                detailRow.classList.add('hidden');
+                btn.innerText = '+';
+                btn.classList.remove('bg-pink-500/20', 'text-pink-300');
+                btn.classList.add('bg-cyan-900/50', 'text-cyan-300');
+            }
+        }
+
+        // 3. Session 访问步长占比 (Bar Chart)
+        const stepChart = echarts.init(document.getElementById('stepChart'));
+        function loadStepRatio() {
+            fetch(`${API_BASE}/step-ratio?taskId=${TASK_ID}`)
+                .then(res => res.json())
+                .then(data => {
+                    const names = data.map(item => item.name);
+                    const values = data.map(item => item.value);
+
+                    const option = {
+                        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                        grid: { top: '10%', left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                        xAxis: { 
+                            type: 'category', 
+                            data: names, 
+                            axisLabel: { color: themeColor, interval: 0 }, 
+                            axisTick: { alignWithLabel: true } 
+                        },
+                        yAxis: { 
+                            type: 'value', 
+                            axisLabel: { color: themeColor }, 
+                            splitLine: { lineStyle: { color: splitLineColor } } 
+                        },
+                        series: [{
+                            name: '占比', 
+                            type: 'bar', 
+                            barWidth: '60%',
+                            data: values,
+                            itemStyle: { 
+                                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#3b82f6' }, { offset: 1, color: '#60a5fa' }]), 
+                                borderRadius: [4, 4, 0, 0] 
+                            },
+                             label: {
+                                show: true,
+                                position: 'top',
+                                formatter: '{c}',
+                                color: '#fff'
+                            }
+                        }]
+                    };
+                    stepChart.setOption(option);
+                });
+        }
+
+        // 6. 获取并渲染 随机抽取 Session (Table)
+        function loadRandomSessions() {
+            fetch(`${API_BASE}/random-sessions?taskId=${TASK_ID}`)
+                .then(res => res.json())
+                .then(data => {
+                    const tbody = document.getElementById('randomSessionBody');
+                    tbody.innerHTML = '';
+                    data.forEach(item => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-cyan-900/20 transition-colors';
+                        tr.innerHTML = `
+                            <td class="p-2 text-cyan-200 font-mono text-xs break-all">${item.sessionId}</td>
+                            <td class="p-2 text-gray-400 font-mono text-xs">${item.startTime}</td>
+                            <td class="p-2 text-white break-all">${item.searchKeywords || '-'}</td>
+                            <td class="p-2 text-orange-300 font-mono text-xs break-all">${item.clickCategoryIds || '-'}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                });
+        }
+
+        // 7. 实时用户行为回放
+        function loadActionStream() {
+            const container = document.getElementById('actionStream');
+            
+            fetch(`${API_BASE}/actions?taskId=${TASK_ID}`)
+                .then(res => res.json())
+                .then(data => {
+                    // Reverse to show oldest first, then we append new ones
+                    // Actually for a log stream, we usually want latest at top or auto-scroll bottom.
+                    // Let's go with "Matrix style" - new items appear at top or bottom?
+                    // Let's try: detailed list, auto-scroll to bottom like a terminal.
+                    
+                    container.innerHTML = '';
+                    let logs = data.reverse(); // Time ascending
+                    
+                    let index = 0;
+                    
+                    function appendLog() {
+                        if (index >= logs.length) index = 0; // Loop for demo effect
+                        
+                        const item = logs[index];
+                        const div = document.createElement('div');
+                        div.className = 'log-item text-gray-400 mb-1';
+                        
+                        // Icon mapping
+                        let actionType = 'UNK';
+                        let colorClass = 'text-gray-500';
+                        let detail = '';
+                        
+                        if (item.searchKeyword && item.searchKeyword !== 'null') {
+                            actionType = 'SEARCH';
+                            colorClass = 'text-yellow-400';
+                            detail = `搜索了 [${item.searchKeyword}]`;
+                        } else if (item.clickCategoryId !== -1 && item.clickCategoryId !== null) {
+                            actionType = 'CLICK';
+                            colorClass = 'text-cyan-400';
+                            detail = `点击了品类 [${item.clickCategoryId}]`;
+                        } else if (item.orderCategoryIds && item.orderCategoryIds !== 'null') {
+                            actionType = 'ORDER';
+                            colorClass = 'text-purple-400';
+                            detail = `下单了品类 [${item.orderCategoryIds}]`;
+                        } else if (item.payCategoryIds && item.payCategoryIds !== 'null') {
+                            actionType = 'PAY';
+                            colorClass = 'text-green-400';
+                            detail = `支付了品类 [${item.payCategoryIds}]`;
+                        } else {
+                            actionType = 'VIEW';
+                            colorClass = 'text-blue-400';
+                            detail = `访问了页面 [${item.pageId}]`;
+                        }
+
+                        div.innerHTML = `
+                            <span class="text-slate-500">[${item.actionTime}]</span> 
+                            <span class="${colorClass} font-bold w-16 inline-block">${actionType}</span> 
+                            <span class="text-gray-300">用户(${item.userId})</span> 
+                            ${detail}
+                        `;
+                        
+                        container.appendChild(div);
+                        container.scrollTop = container.scrollHeight;
+                        
+                        
+                        // Keep DOM size manageable - REDUCED to 15 to prevent layout breaking
+                        if (container.children.length > 15) {
+                            container.removeChild(container.firstChild);
+                        }
+                        
+                        index++;
+                        // Random delay for "real-time" feel
+                        setTimeout(appendLog, Math.random() * 800 + 200);
+                    }
+                    
+                    // Start loop
+                    appendLog();
+                });
+        }
+
+        // 初始化加载
+        loadSessionRatio();
+        loadNestedTop10();
+        loadStepRatio();
+        loadRandomSessions();
+        loadActionStream();
+
+        window.addEventListener('resize', () => {
+            sessionChart.resize();
+            stepChart.resize();
+        });
+    </script>
+</body>
+</html>

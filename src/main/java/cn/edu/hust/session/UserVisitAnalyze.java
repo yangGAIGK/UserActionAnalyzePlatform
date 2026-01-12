@@ -36,13 +36,16 @@ import java.util.*;
 public class UserVisitAnalyze {
     public static void main(String[] args)
     {
-        args=new String[]{"1"};
-        /**
-         * 构建spark上下文
-         */
-        SparkConf conf=new SparkConf().setAppName(Constants.APP_NAME_SESSION).setMaster("local[3]");
+        // // args=new String[]{"1"};
+        // /**
+        //  * 构建spark上下文
+        //  */
+        SparkConf conf=new SparkConf().setAppName(Constants.APP_NAME_SESSION);
         JavaSparkContext context=new JavaSparkContext(conf);
         SQLContext sc=getSQLContext(context.sc());
+        if(!(ConfigurationManager.getBoolean(Constants.SPARK_LOCAL))) {
+            sc.sql("USE BigDataPlatm");
+        }
         //生成模拟数据
         mock(context,sc);
 
@@ -68,7 +71,6 @@ public class UserVisitAnalyze {
         //通过条件对RDD进行筛选
         // 重构，同时统计
         Accumulator<String> sessionAggrStatAccumulator=context.accumulator("",new SessionAggrStatAccumulator());
-
 
         //在进行accumulator之前，需要aciton动作，不然会为空
         JavaPairRDD<String,String> filteredSessionRDD=filterSessionAndAggrStat(sesssionAggregateInfoRDD,jsonObject,sessionAggrStatAccumulator);
@@ -111,7 +113,7 @@ public class UserVisitAnalyze {
         //获取热门品类数据Top10
         List<Tuple2<CategorySortKey,String>> top10CategoryIds=getTop10Category(taskId,commonFullClickInfoRDD);
         //获取热门每一个品类点击Top10session
-        getTop10Session(context,taskId,sessionInfoPairRDD,top10CategoryIds);
+        getTop10Session(context,taskId,commonFullClickInfoRDD,top10CategoryIds);
         //关闭spark上下文
         context.close();
     }
@@ -137,10 +139,12 @@ public class UserVisitAnalyze {
     private static void mock(JavaSparkContext context,SQLContext sc)
     {
         boolean local= ConfigurationManager.getBoolean(Constants.SPARK_LOCAL);
+        
         if(local)
         {
             MockData.mock(context,sc);
         }
+        
 
     }
 
@@ -179,7 +183,8 @@ public class UserVisitAnalyze {
      * @param sessionInfoPairRDD
      * @return
      */
-    private static JavaPairRDD<String,String> aggregateBySessionId(SQLContext sc, JavaPairRDD<String, Row> sessionInfoPairRDD) {
+    private static JavaPairRDD<String,String> aggregateBySessionId(SQLContext sc, JavaPairRDD<String, Row> sessionInfoPairRDD) 
+    {
         /**
          * 先将数据映射成map格式
          */
@@ -197,9 +202,11 @@ public class UserVisitAnalyze {
          */
         JavaPairRDD<String,Iterable<Row>> sessionActionGrouped=sessionInfoPairRDD.groupByKey();
 
-        JavaPairRDD<Long,String> sessionPartInfo=sessionActionGrouped.mapToPair(new PairFunction<Tuple2<String, Iterable<Row>>, Long, String>() {
+        JavaPairRDD<Long,String> sessionPartInfo=sessionActionGrouped.mapToPair(new PairFunction<Tuple2<String, Iterable<Row>>, Long, String>() 
+        {
             @Override
-            public Tuple2<Long, String> call(Tuple2<String, Iterable<Row>> stringIterableTuple2) throws Exception {
+            public Tuple2<Long, String> call(Tuple2<String, Iterable<Row>> stringIterableTuple2) throws Exception 
+            {
                 String sessionId=stringIterableTuple2._1;
                 Iterable<Row> rows=stringIterableTuple2._2;
                 StringBuffer searchKeywords=new StringBuffer();
@@ -210,10 +217,14 @@ public class UserVisitAnalyze {
                 int stepLength=0;
                 for (Row row:rows)
                 {
-                    if(userId==null)
-                        userId=row.getLong(1);
-                    String searchKeyword=row.getString(5);
-                    Long clickCategoryId=row.getLong(6);
+                    if(userId==null) {
+                        userId = row.isNullAt(1) ? -1L : row.getLong(1);
+                    }
+                    
+                    String searchKeyword = row.isNullAt(5) ? null : row.getString(5);
+                    Long clickCategoryId = row.isNullAt(6) ? -1L : row.getLong(6);
+
+
                     //判断是否需要拼接
                     if(StringUtils.isNotEmpty(searchKeyword))
                     {
@@ -244,14 +255,17 @@ public class UserVisitAnalyze {
                         stepLength++;
                 }
                 //访问时长(s)
-                Long visitLengtth=(endTime.getTime()-startTime.getTime())/1000;
+                Long visitLengtth = 0L;
+                if (startTime != null && endTime != null) {
+                    visitLengtth = (endTime.getTime() - startTime.getTime()) / 1000;
+                }
 
-                String searchKeywordsInfo=StringUtils.trimComma(searchKeywords.toString());
-                String clickCategoryIdsInfo=StringUtils.trimComma(clickCategoryIds.toString());
-                String info=Constants.FIELD_SESSIONID+"="+sessionId+"|"+Constants.FIELD_SERACH_KEYWORDS+"="+searchKeywordsInfo+"|"
-                        +Constants.FIELD_CLICK_CATEGORYIDS+"="+clickCategoryIdsInfo+"|"+Constants.FIELD_VISIT_LENGTH+"="+visitLengtth+"|"
-                        +Constants.FIELD_STEP_LENGTH+"="+stepLength+"|"+Constants.FIELD_START_TIME+"="+DateUtils.formatTime(startTime);
-                return new Tuple2<Long, String>(userId,info);
+                String searchKeywordsInfo = StringUtils.trimComma(searchKeywords.toString());
+                String clickCategoryIdsInfo = StringUtils.trimComma(clickCategoryIds.toString());
+                String info = Constants.FIELD_SESSIONID + "=" + sessionId + "|" + Constants.FIELD_SERACH_KEYWORDS + "=" + searchKeywordsInfo + "|"
+                        + Constants.FIELD_CLICK_CATEGORYIDS + "=" + clickCategoryIdsInfo + "|" + Constants.FIELD_VISIT_LENGTH + "=" + visitLengtth + "|"
+                        + Constants.FIELD_STEP_LENGTH + "=" + stepLength + "|" + Constants.FIELD_START_TIME + "=" + (startTime != null ? DateUtils.formatTime(startTime) : "");
+                return new Tuple2<Long, String>(userId, info);
             }
         });
 
@@ -277,10 +291,11 @@ public class UserVisitAnalyze {
                 String sessionPartInfo=longTuple2Tuple2._2._1;
                 Row userInfo=longTuple2Tuple2._2._2;
                 //拿到需要的用户信息
-                int age=userInfo.getInt(3);
-                String professional=userInfo.getString(4);
-                String city=userInfo.getString(5);
-                String sex=userInfo.getString(6);
+                //拿到需要的用户信息
+                int age = userInfo.isNullAt(3) ? -1 : userInfo.getInt(3);
+                String professional = userInfo.isNullAt(4) ? "unknown" : userInfo.getString(4);
+                String city = userInfo.isNullAt(5) ? "unknown" : userInfo.getString(5);
+                String sex = userInfo.isNullAt(6) ? "unknown" : userInfo.getString(6);
                 //拼接字符串
                 String fullInfo=sessionPartInfo+"|"+Constants.FIELD_AGE+"="+age+"|"
                         +Constants.FIELD_PROFESSIONAL+"="+professional+"|"+Constants.FIELD_CITY+"="+city+"|"+Constants.FIELD_SEX+"="+sex;
@@ -300,7 +315,8 @@ public class UserVisitAnalyze {
      * @param sessionAggrStatAccumulator
      * @return
      */
-    private static JavaPairRDD<String,String> filterSessionAndAggrStat(JavaPairRDD<String, String> sessionInfoRDD, final JSONObject taskParam, final Accumulator<String> sessionAggrStatAccumulator){
+    private static JavaPairRDD<String,String> filterSessionAndAggrStat(JavaPairRDD<String, String> sessionInfoRDD, final JSONObject taskParam, final Accumulator<String> sessionAggrStatAccumulator)
+    {
         //得到条件
         String startAge=ParamUtils.getParam(taskParam,Constants.PARAM_STARTAGE);
         String endAge=ParamUtils.getParam(taskParam,Constants.PARAM_ENDAGE);
@@ -316,15 +332,16 @@ public class UserVisitAnalyze {
                 (cities!=null?Constants.PARAM_CIYTIES+"="+cities+"|":"")+(sex!=null?Constants.PARAM_SEX+"="+sex+"|":"")+
                 (keyWords!=null?Constants.PARAM_SERACH_KEYWORDS+"="+keyWords+"|":"")+(categoryIds!=null?Constants.PARAM_CLICK_CATEGORYIDS+"="+categoryIds+"|":"");
 
-
         if(_paramter.endsWith("\\|"))
             _paramter=_paramter.substring(0,_paramter.length()-1);
 
         final String paramter=_paramter;
 
-        JavaPairRDD<String,String> filteredSessionRDD=sessionInfoRDD.filter(new Function<Tuple2<String, String>, Boolean>() {
+        JavaPairRDD<String,String> filteredSessionRDD=sessionInfoRDD.filter(new Function<Tuple2<String, String>, Boolean>() 
+        {
             @Override
-            public Boolean call(Tuple2<String, String> tuple2) throws Exception {
+            public Boolean call(Tuple2<String, String> tuple2) throws Exception 
+            {
                 String sessionInfo=tuple2._2;
                 //按照条件进行过滤
                 //按照年龄进行过滤
@@ -340,9 +357,9 @@ public class UserVisitAnalyze {
                 if(!ValidUtils.equal(sessionInfo,Constants.FIELD_SEX,paramter,Constants.PARAM_SEX))
                     return false;
                 //按照搜索词进行过滤，只要有一个搜索词即可
-                if(!ValidUtils.in(sessionInfo,Constants.FIELD_SERACH_KEYWORDS,paramter,Constants.PARAM_PROFESSONALS))
+                if(!ValidUtils.in(sessionInfo,Constants.FIELD_SERACH_KEYWORDS,paramter,Constants.PARAM_SERACH_KEYWORDS))
                     return false;
-                if(!ValidUtils.in(sessionInfo,Constants.FIELD_CLICK_CATEGORYIDS,paramter,Constants.FIELD_CLICK_CATEGORYIDS))
+                if(!ValidUtils.in(sessionInfo,Constants.FIELD_CLICK_CATEGORYIDS,paramter,Constants.PARAM_CLICK_CATEGORYIDS))
                     return false;
                 //如果经过了之前的所有的过滤条件，也就是满足用户筛选条件
                 sessionAggrStatAccumulator.add(Constants.SESSION_COUNT);
@@ -358,7 +375,7 @@ public class UserVisitAnalyze {
             //统计访问时长的数量
             private void calculateVisitLength(Long visitLegth)
             {
-                if(visitLegth>=1&&visitLegth<=3)
+                if(visitLegth>=0&&visitLegth<=3)
                     sessionAggrStatAccumulator.add(Constants.TIME_PERIOD_1s_3s);
                 else if(visitLegth>=4&&visitLegth<=6)
                     sessionAggrStatAccumulator.add(Constants.TIME_PERIOD_4s_6s);
@@ -420,7 +437,8 @@ public class UserVisitAnalyze {
      * @param filteredSessionRDD
      * @param sessionInfoPairRDD
      */
-    private static void randomExtractSession(final Long taskId, JavaPairRDD<String, String> filteredSessionRDD, JavaPairRDD<String, Row> sessionInfoPairRDD) {
+    private static void randomExtractSession(final Long taskId, JavaPairRDD<String, String> filteredSessionRDD, JavaPairRDD<String, Row> sessionInfoPairRDD) 
+    {
         //1.先将过滤Seesion进行映射，映射成为Time,Info的数据格式
         final JavaPairRDD<String,String> mapDataRDD=filteredSessionRDD.mapToPair(new PairFunction<Tuple2<String, String>, String, String>() {
             @Override
@@ -557,16 +575,16 @@ public class UserVisitAnalyze {
                     Tuple2<String, Tuple2<String, Row>> tuple2=tuple2Iterator.next();
                     Row row=tuple2._2._2;
                     String sessionId=tuple2._1;
-                    Long userId=row.getLong(1);
-                    Long pageId=row.getLong(3);
-                    String actionTime=row.getString(4);
-                    String searchKeyWard=row.getString(5);
-                    Long clickCategoryId=row.getLong(6);
-                    Long clickProducetId=row.getLong(7);
-                    String orderCategoryId=row.getString(8);
-                    String orderProducetId=row.getString(9);
-                    String payCategoryId=row.getString(10);
-                    String payProducetId=row.getString(11);
+                    Long userId = row.isNullAt(1) ? -1L : row.getLong(1);
+                    Long pageId = row.isNullAt(3) ? -1L : row.getLong(3);
+                    String actionTime = row.isNullAt(4) ? null : row.getString(4);
+                    String searchKeyWard = row.isNullAt(5) ? null : row.getString(5);
+                    Long clickCategoryId = row.isNullAt(6) ? -1L : row.getLong(6);
+                    Long clickProducetId = row.isNullAt(7) ? -1L : row.getLong(7);
+                    String orderCategoryId = row.isNullAt(8) ? null : row.getString(8);
+                    String orderProducetId = row.isNullAt(9) ? null : row.getString(9);
+                    String payCategoryId = row.isNullAt(10) ? null : row.getString(10);
+                    String payProducetId = row.isNullAt(11) ? null : row.getString(11);
                     SessionDetail sessionDetail=new SessionDetail();
                     sessionDetail.set(taskId,userId,sessionId,pageId,actionTime,searchKeyWard,clickCategoryId,clickProducetId,orderCategoryId,orderProducetId,payCategoryId,payProducetId);
                     sessionDetailList.add(sessionDetail);
@@ -578,27 +596,48 @@ public class UserVisitAnalyze {
     }
 
     //计算各个范围的占比，并持久化到数据库
-    private static void calculateAndPersist(String value,Long taskId) {
+    private static void calculateAndPersist(String value,Long taskId) 
+    {
         //System.out.println(value);
-        Long sessionCount=Long.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.SESSION_COUNT));
+        String sessionCountStr = StringUtils.getFieldFromConcatString(value,"\\|",Constants.SESSION_COUNT);
+        Long sessionCount = (sessionCountStr == null || "null".equals(sessionCountStr) || sessionCountStr.isEmpty()) ? 0L : Long.valueOf(sessionCountStr);
+        if (sessionCount == 0L) sessionCount = 1L; // Prevent division by zero
+
         //各个范围的访问时长
-        Double visit_Length_1s_3s=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_1s_3s));
-        Double visit_Length_4s_6s=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_4s_6s));
-        Double visit_Length_7s_9s=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_7s_9s));
-        Double visit_Length_10s_30s=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_10s_30s));
-        Double visit_Length_30s_60s=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_30s_60s));
-        Double visit_Length_1m_3m=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_1m_3m));
-        Double visit_Length_3m_10m=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_3m_10m));
-        Double visit_Length_10m_30m=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_10m_30m));
-        Double visit_Length_30m=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_30m));
+        String v1s3s = StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_1s_3s);
+        String v4s6s = StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_4s_6s);
+        String v7s9s = StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_7s_9s);
+        String v10s30s = StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_10s_30s);
+        String v30s60s = StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_30s_60s);
+        String v1m3m = StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_1m_3m);
+        String v3m10m = StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_3m_10m);
+        String v10m30m = StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_10m_30m);
+        String v30m = StringUtils.getFieldFromConcatString(value,"\\|",Constants.TIME_PERIOD_30m);
+
+        Double visit_Length_1s_3s = (v1s3s == null || "null".equals(v1s3s) || v1s3s.isEmpty()) ? 0.0 : Double.valueOf(v1s3s);
+        Double visit_Length_4s_6s = (v4s6s == null || "null".equals(v4s6s) || v4s6s.isEmpty()) ? 0.0 : Double.valueOf(v4s6s);
+        Double visit_Length_7s_9s = (v7s9s == null || "null".equals(v7s9s) || v7s9s.isEmpty()) ? 0.0 : Double.valueOf(v7s9s);
+        Double visit_Length_10s_30s = (v10s30s == null || "null".equals(v10s30s) || v10s30s.isEmpty()) ? 0.0 : Double.valueOf(v10s30s);
+        Double visit_Length_30s_60s = (v30s60s == null || "null".equals(v30s60s) || v30s60s.isEmpty()) ? 0.0 : Double.valueOf(v30s60s);
+        Double visit_Length_1m_3m = (v1m3m == null || "null".equals(v1m3m) || v1m3m.isEmpty()) ? 0.0 : Double.valueOf(v1m3m);
+        Double visit_Length_3m_10m = (v3m10m == null || "null".equals(v3m10m) || v3m10m.isEmpty()) ? 0.0 : Double.valueOf(v3m10m);
+        Double visit_Length_10m_30m = (v10m30m == null || "null".equals(v10m30m) || v10m30m.isEmpty()) ? 0.0 : Double.valueOf(v10m30m);
+        Double visit_Length_30m = (v30m == null || "null".equals(v30m) || v30m.isEmpty()) ? 0.0 : Double.valueOf(v30m);
 
         //各个范围的访问步长
-        Double step_Length_1_3=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_1_3));
-        Double step_Length_4_6=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_4_6));
-        Double step_Length_7_9=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_7_9));
-        Double step_Length_10_30=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_10_30));
-        Double step_Length_30_60=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_30_60));
-        Double step_Length_60=Double.valueOf(StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_60));
+        String s13 = StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_1_3);
+        String s46 = StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_4_6);
+        String s79 = StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_7_9);
+        String s1030 = StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_10_30);
+        String s3060 = StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_30_60);
+        String s60 = StringUtils.getFieldFromConcatString(value,"\\|",Constants.STEP_PERIOD_60);
+
+        Double step_Length_1_3 = (s13 == null || "null".equals(s13) || s13.isEmpty()) ? 0.0 : Double.valueOf(s13);
+        Double step_Length_4_6 = (s46 == null || "null".equals(s46) || s46.isEmpty()) ? 0.0 : Double.valueOf(s46);
+        Double step_Length_7_9 = (s79 == null || "null".equals(s79) || s79.isEmpty()) ? 0.0 : Double.valueOf(s79);
+        Double step_Length_10_30 = (s1030 == null || "null".equals(s1030) || s1030.isEmpty()) ? 0.0 : Double.valueOf(s1030);
+        Double step_Length_30_60 = (s3060 == null || "null".equals(s3060) || s3060.isEmpty()) ? 0.0 : Double.valueOf(s3060);
+        Double step_Length_60 = (s60 == null || "null".equals(s60) || s60.isEmpty()) ? 0.0 : Double.valueOf(s60);
 
         //访问时长对应的sesison占比，保留3位小数
         double visit_Length_1s_3s_ratio=NumberUtils.formatDouble(visit_Length_1s_3s/sessionCount,3);
@@ -615,7 +654,7 @@ public class UserVisitAnalyze {
         double step_Length_1_3_ratio= NumberUtils.formatDouble(step_Length_1_3/sessionCount,3);
         double step_Length_4_6_ratio=NumberUtils.formatDouble(step_Length_4_6/sessionCount,3);
         double step_Length_7_9_ratio=NumberUtils.formatDouble(step_Length_7_9/sessionCount,3);
-        double c=NumberUtils.formatDouble(step_Length_10_30/sessionCount,3);
+        double step_Length_10_30_ratio =NumberUtils.formatDouble(step_Length_10_30/sessionCount,3);
         double step_Length_30_60_ratio=NumberUtils.formatDouble(step_Length_30_60/sessionCount,3);
         double step_Length_60_ratio=NumberUtils.formatDouble(step_Length_60/sessionCount,3);
 
@@ -623,10 +662,12 @@ public class UserVisitAnalyze {
         sessionAggrStat.set(taskId,sessionCount,visit_Length_1s_3s_ratio,visit_Length_4s_6s_ratio,
                 visit_Length_7s_9s_ratio,visit_Length_10s_30s_ratio,visit_Length_30s_60s_ratio,
                 visit_Length_1m_3m_ratio,visit_Length_3m_10m_ratio,visit_Length_10m_30m_ratio,visit_Length_30m_ratio
-        ,step_Length_1_3_ratio,step_Length_4_6_ratio,step_Length_7_9_ratio,step_Length_7_9_ratio,step_Length_30_60_ratio,step_Length_60_ratio);
+        ,step_Length_1_3_ratio,step_Length_4_6_ratio,step_Length_7_9_ratio,step_Length_10_30_ratio,step_Length_30_60_ratio,step_Length_60_ratio);
         List<SessionAggrStat> sessionAggrStatList=new ArrayList<SessionAggrStat>();
         sessionAggrStatList.add(sessionAggrStat);
         // 插入数据库
+        // 先删除旧数据，防止主键冲突
+        DaoFactory.getSessionAggrStatDao().deleteByTaskId(taskId);
         DaoFactory.getSessionAggrStatDao().batchInsert(sessionAggrStatList);
     }
 
@@ -636,7 +677,8 @@ public class UserVisitAnalyze {
      * @param taskId
      * @param sessionId2DetailRDD
      */
-    private static List<Tuple2<CategorySortKey,String>> getTop10Category(Long taskId, JavaPairRDD<String, Row> sessionId2DetailRDD) {
+    private static List<Tuple2<CategorySortKey,String>> getTop10Category(Long taskId, JavaPairRDD<String, Row> sessionId2DetailRDD) 
+    {
         //1.第一步已抽离出方法getFilterFullInfoRDD
         //2。获取访问的品类id，访问过表示点击，下单，支付
         JavaPairRDD<Long,Long> categoryRDD=sessionId2DetailRDD.flatMapToPair(new PairFlatMapFunction<Tuple2<String,Row>, Long, Long>() {
@@ -644,24 +686,28 @@ public class UserVisitAnalyze {
             public Iterable<Tuple2<Long, Long>> call(Tuple2<String, Row> stringRowTuple2) throws Exception {
                 Row row=stringRowTuple2._2;
                 List<Tuple2<Long,Long>> visitCategoryList=new ArrayList<Tuple2<Long, Long>>();
-                Long clickCategoryId=row.getLong(6);
+                Long clickCategoryId = row.isNullAt(6) ? -1L : row.getLong(6);
                 //点击品类的id
-                if(clickCategoryId!=null)
+                if(clickCategoryId != -1L)
                     visitCategoryList.add(new Tuple2<Long, Long>(clickCategoryId,clickCategoryId));
 
-                if(row.get(8)!=null){
-                    String[] orderCategoryIdsSplited=row.getString(8).split(",");
-                    for (String orderCategoryId:
-                            orderCategoryIdsSplited) {
-                        visitCategoryList.add(new Tuple2<Long, Long>(Long.valueOf(orderCategoryId),Long.valueOf(orderCategoryId)));
+                String orderCategoryIds = row.isNullAt(8) ? null : row.getString(8);
+                if(orderCategoryIds != null){
+                    String[] orderCategoryIdsSplited = orderCategoryIds.split(",");
+                    for (String orderCategoryId : orderCategoryIdsSplited) {
+                        if (orderCategoryId != null && !"null".equals(orderCategoryId) && !orderCategoryId.isEmpty()) {
+                            visitCategoryList.add(new Tuple2<Long, Long>(Long.valueOf(orderCategoryId), Long.valueOf(orderCategoryId)));
+                        }
                     }
                 }
 
-                if(row.get(10)!=null){
-                    String[] payCategoryIdsSplited=row.getString(10).split(",");
-                    for (String payCategoryId:
-                            payCategoryIdsSplited) {
-                        visitCategoryList.add(new Tuple2<Long, Long>(Long.valueOf(payCategoryId),Long.valueOf(payCategoryId)));
+                String payCategoryIds = row.isNullAt(10) ? null : row.getString(10);
+                if(payCategoryIds != null){
+                    String[] payCategoryIdsSplited = payCategoryIds.split(",");
+                    for (String payCategoryId : payCategoryIdsSplited) {
+                        if (payCategoryId != null && !"null".equals(payCategoryId) && !payCategoryId.isEmpty()) {
+                            visitCategoryList.add(new Tuple2<Long, Long>(Long.valueOf(payCategoryId), Long.valueOf(payCategoryId)));
+                        }
                     }
                 }
                 return visitCategoryList;
@@ -688,9 +734,14 @@ public class UserVisitAnalyze {
             @Override
             public Tuple2<CategorySortKey, String> call(Tuple2<Long, String> longStringTuple2) throws Exception {
                 String countInfo=longStringTuple2._2;
-                Long clickCount=Long.valueOf(StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_CLICK_CATEGORY));
-                Long orderCount=Long.valueOf(StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_ORDER_CATEGORY));
-                Long payCount=Long.valueOf(StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_ORDER_CATEGORY));
+                String clickCountStr = StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_CLICK_CATEGORY);
+                String orderCountStr = StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_ORDER_CATEGORY);
+                String payCountStr = StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_PAY_CATEGORY);
+
+                Long clickCount = (clickCountStr == null || "null".equals(clickCountStr) || clickCountStr.isEmpty()) ? 0L : Long.valueOf(clickCountStr);
+                Long orderCount = (orderCountStr == null || "null".equals(orderCountStr) || orderCountStr.isEmpty()) ? 0L : Long.valueOf(orderCountStr);
+                Long payCount = (payCountStr == null || "null".equals(payCountStr) || payCountStr.isEmpty()) ? 0L : Long.valueOf(payCountStr);
+                
                 CategorySortKey key=new CategorySortKey();
                 key.set(clickCount,orderCount,payCount);
                 return new Tuple2<CategorySortKey, String>(key,countInfo);
@@ -704,15 +755,22 @@ public class UserVisitAnalyze {
         for(Tuple2<CategorySortKey,String> tuple2:top10CategoryList)
         {
             String countInfo=tuple2._2;
-            Long categoryId=Long.valueOf(StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_CATEGORY_ID));
-            Long clickCount=Long.valueOf(StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_CLICK_CATEGORY));
-            Long orderCount=Long.valueOf(StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_ORDER_CATEGORY));
-            Long payCount=Long.valueOf(StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_ORDER_CATEGORY));
+            String categoryIdStr = StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_CATEGORY_ID);
+            String clickCountStr = StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_CLICK_CATEGORY);
+            String orderCountStr = StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_ORDER_CATEGORY);
+            String payCountStr = StringUtils.getFieldFromConcatString(countInfo,"\\|",Constants.FIELD_PAY_CATEGORY);
+
+            Long categoryId = (categoryIdStr == null || "null".equals(categoryIdStr) || categoryIdStr.isEmpty()) ? -1L : Long.valueOf(categoryIdStr);
+            Long clickCount = (clickCountStr == null || "null".equals(clickCountStr) || clickCountStr.isEmpty()) ? 0L : Long.valueOf(clickCountStr);
+            Long orderCount = (orderCountStr == null || "null".equals(orderCountStr) || orderCountStr.isEmpty()) ? 0L : Long.valueOf(orderCountStr);
+            Long payCount = (payCountStr == null || "null".equals(payCountStr) || payCountStr.isEmpty()) ? 0L : Long.valueOf(payCountStr);
+            
             Top10Category top10Category=new Top10Category();
             top10Category.set(taskId,categoryId,clickCount,orderCount,payCount);
             top10Categories.add(top10Category);
         }
         //插入数据库
+        DaoFactory.getTop10CategoryDao().deleteByTaskId(taskId);
         DaoFactory.getTop10CategoryDao().batchInsert(top10Categories);
         return top10CategoryList;
     }
@@ -727,7 +785,8 @@ public class UserVisitAnalyze {
      * @param payCategoryRDD
      * @return
      */
-    private static JavaPairRDD<Long,String> joinCategoryAndData(JavaPairRDD<Long, Long> categoryRDD, JavaPairRDD<Long, Long> clickCategoryRDD, JavaPairRDD<Long, Long> orderCategoryRDD, JavaPairRDD<Long, Long> payCategoryRDD) {
+    private static JavaPairRDD<Long,String> joinCategoryAndData(JavaPairRDD<Long, Long> categoryRDD, JavaPairRDD<Long, Long> clickCategoryRDD, JavaPairRDD<Long, Long> orderCategoryRDD, JavaPairRDD<Long, Long> payCategoryRDD) 
+    {
         JavaPairRDD<Long, Tuple2<Long, com.google.common.base.Optional<Long>>> tmpJoinRDD=categoryRDD.leftOuterJoin(clickCategoryRDD);
 
         JavaPairRDD<Long,String> tmpRDD=tmpJoinRDD.mapToPair(new PairFunction<Tuple2<Long, Tuple2<Long, com.google.common.base.Optional<Long>>>, Long, String>() {
@@ -799,10 +858,14 @@ public class UserVisitAnalyze {
             public Iterable<Tuple2<Long, Long>> call(Tuple2<String, Row> stringRowTuple2) throws Exception {
                 List<Tuple2<Long,Long>> orderCategoryIds=new ArrayList<Tuple2<Long, Long>>();
                 Row row=stringRowTuple2._2;
-                String payCategoryIdsSplited[]=row.getString(10).split(",");
-                for (String payCategoryId:
-                        payCategoryIdsSplited) {
-                    orderCategoryIds.add(new Tuple2<Long, Long>(Long.valueOf(payCategoryId),Long.valueOf(payCategoryId)));
+                String payCategoryIds = row.isNullAt(10) ? null : row.getString(10);
+                if (payCategoryIds != null) {
+                    String payCategoryIdsSplited[] = payCategoryIds.split(",");
+                    for (String payCategoryId : payCategoryIdsSplited) {
+                        if (payCategoryId != null && !"null".equals(payCategoryId) && !payCategoryId.isEmpty()) {
+                            orderCategoryIds.add(new Tuple2<Long, Long>(Long.valueOf(payCategoryId), 1L));
+                        }
+                    }
                 }
                 return orderCategoryIds;
             }
@@ -836,10 +899,14 @@ public class UserVisitAnalyze {
             public Iterable<Tuple2<Long, Long>> call(Tuple2<String, Row> stringRowTuple2) throws Exception {
                 List<Tuple2<Long,Long>> orderCategoryIds=new ArrayList<Tuple2<Long, Long>>();
                 Row row=stringRowTuple2._2;
-                String orderCategoryIdsSplited[]=row.getString(8).split(",");
-                for (String orderCategoryId:
-                     orderCategoryIdsSplited) {
-                    orderCategoryIds.add(new Tuple2<Long, Long>(Long.valueOf(orderCategoryId),Long.valueOf(orderCategoryId)));
+                String orderCategoryIdsRaw = row.isNullAt(8) ? null : row.getString(8);
+                if (orderCategoryIdsRaw != null) {
+                    String orderCategoryIdsSplited[] = orderCategoryIdsRaw.split(",");
+                    for (String orderCategoryId : orderCategoryIdsSplited) {
+                        if (orderCategoryId != null && !"null".equals(orderCategoryId) && !orderCategoryId.isEmpty()) {
+                            orderCategoryIds.add(new Tuple2<Long, Long>(Long.valueOf(orderCategoryId), 1L));
+                        }
+                    }
                 }
                 return orderCategoryIds;
             }
@@ -870,8 +937,9 @@ public class UserVisitAnalyze {
         JavaPairRDD<Long,Long> clickCategoryRDD=clickActionRDD.mapToPair(new PairFunction<Tuple2<String,Row>, Long,Long>() {
             @Override
             public Tuple2<Long,Long> call(Tuple2<String, Row> stringRowTuple2) throws Exception {
-                Long row=stringRowTuple2._2.getLong(6);
-                return new Tuple2<Long, Long>(row,1L);
+                Row row = stringRowTuple2._2;
+                Long categoryId = row.isNullAt(6) ? -1L : row.getLong(6);
+                return new Tuple2<Long, Long>(categoryId, 1L);
             }
         });
 
@@ -959,6 +1027,7 @@ public class UserVisitAnalyze {
                         if(top10Sessions[i]==null)
                         {
                             top10Sessions[i]=sessionCount;
+                            break;
                         }
                         else
                         {
@@ -988,6 +1057,7 @@ public class UserVisitAnalyze {
                     }
                 }
                 //批量插入数据库
+                DaoFactory.getTop10CategorySessionDao().deleteByTaskId(taskId);
                 DaoFactory.getTop10CategorySessionDao().batchInsert(top10CategorySessionList);
                 return sessionIdList;
             }
@@ -1005,16 +1075,16 @@ public class UserVisitAnalyze {
                     Tuple2<String, Tuple2<String, Row>> tuple2=tuple2Iterator.next();
                     Row row=tuple2._2._2;
                     String sessionId=tuple2._1;
-                    Long userId=row.getLong(1);
-                    Long pageId=row.getLong(3);
-                    String actionTime=row.getString(4);
-                    String searchKeyWard=row.getString(5);
-                    Long clickCategoryId=row.getLong(6);
-                    Long clickProducetId=row.getLong(7);
-                    String orderCategoryId=row.getString(8);
-                    String orderProducetId=row.getString(9);
-                    String payCategoryId=row.getString(10);
-                    String payProducetId=row.getString(11);
+                    Long userId = row.isNullAt(1) ? -1L : row.getLong(1);
+                    Long pageId = row.isNullAt(3) ? -1L : row.getLong(3);
+                    String actionTime = row.isNullAt(4) ? null : row.getString(4);
+                    String searchKeyWard = row.isNullAt(5) ? null : row.getString(5);
+                    Long clickCategoryId = row.isNullAt(6) ? -1L : row.getLong(6);
+                    Long clickProducetId = row.isNullAt(7) ? -1L : row.getLong(7);
+                    String orderCategoryId = row.isNullAt(8) ? null : row.getString(8);
+                    String orderProducetId = row.isNullAt(9) ? null : row.getString(9);
+                    String payCategoryId = row.isNullAt(10) ? null : row.getString(10);
+                    String payProducetId = row.isNullAt(11) ? null : row.getString(11);
                     SessionDetail sessionDetail=new SessionDetail();
                     sessionDetail.set(taskId,userId,sessionId,pageId,actionTime,searchKeyWard,clickCategoryId,clickProducetId,orderCategoryId,orderProducetId,payCategoryId,payProducetId);
                     sessionDetailList.add(sessionDetail);

@@ -7,7 +7,7 @@ public class Constants {
     public static final String JDBC_DRIVER="jdbc.driver";
     public static final String JDBC_URL="jdbc.url";
     public static final String JDBC_USERNAME="jdbc.username";
-    public static final String JDBC_PSSWORD="jdbc.password";
+    public static final String JDBC_PASSWORD="jdbc.password";
     public static final String JDBC_ACTIVE="jdbc.active";
 
     /**
@@ -26,9 +26,9 @@ public class Constants {
     public static final String FIELD_STEP_LENGTH="stepLength";
     public static final String FIELD_START_TIME="startTime";
     public static final String FIELD_CATEGORY_ID="categoryId";
-    public static final String FIELD_CLICK_CATEGORY="categoryId";
-    public static final String FIELD_ORDER_CATEGORY="clickCategory";
-    public static final String FIELD_PAY_CATEGORY="orderCategory";
+    public static final String FIELD_CLICK_CATEGORY="clickCategory";
+    public static final String FIELD_ORDER_CATEGORY="orderCategory";
+    public static final String FIELD_PAY_CATEGORY="payCategory";
 
     /**
      * Spark任务相关厂常量

@@ -9,8 +9,5 @@
         <module name="UserActionAnalyzePlatform" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel>
-      <module name="UserActionAnalyzePlatform" target="1.6" />
-    </bytecodeTargetLevel>
   </component>
 </project>

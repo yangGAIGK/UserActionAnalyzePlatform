@@ -4,7 +4,8 @@ import cn.edu.hust.constant.Constants;
 import cn.edu.hust.util.StringUtils;
 import org.apache.spark.AccumulatorParam;
 
-public class SessionAggrStatAccumulator implements AccumulatorParam<String>{
+public class SessionAggrStatAccumulator implements AccumulatorParam<String>
+{
     @Override
     public String addAccumulator(String s, String t1) {
         return add(s,t1);

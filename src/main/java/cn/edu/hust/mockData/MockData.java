@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.StructType;
 public class MockData {
 
 	/**
-	 * 弄你数据
+	 * 数据
 	 * @param sc
 	 * @param sqlContext
 	 */
@@ -35,7 +35,7 @@ public class MockData {
 		List<Row> rows = new ArrayList<Row>();
 		
 		String[] searchKeywords = new String[] {"火锅", "蛋糕", "重庆辣子鸡", "重庆小面",
-				"呷哺呷哺", "新辣道鱼火锅", "国贸大厦", "太古商场", "日本料理", "温泉"};
+				"啤酒", "新辣道鱼火锅", "国贸大厦", "太古商场", "日本料理", "温泉","保暖被", "保暖内衣","保暖裤","保暖靴","保暖帽","保暖袜","保暖手套","保暖围巾","墨镜","防晒霜"};
 		String date = DateUtils.getTodayDate();
 		String[] actions = new String[]{"search", "click", "order", "pay"};
 		Random random = new Random();
@@ -100,7 +100,7 @@ public class MockData {
 		
 		DataFrame df = sqlContext.createDataFrame(rowsRDD, schema);
 		
-		df.registerTempTable("user_visit_action");  
+		df.write().mode("overwrite").saveAsTable("BigDataPlatm.user_visit_action"); 
 		for(Row _row : df.take(1)) {
 			System.out.println(_row);  
 		}
@@ -140,8 +140,7 @@ public class MockData {
 		for(Row _row : df2.take(1)) {
 			System.out.println(_row);  
 		}
-		
-		df2.registerTempTable("user_info");  
+		df2.write().mode("overwrite").saveAsTable("BigDataPlatm.user_info"); 
 	}
-	
+
 }

@@ -12,25 +12,19 @@
 
 5.访问行为，购物行为，广告点击行为，对这些行为进行分析，使用大数据技术来帮助公司提升业绩。
 
-6.主要的功能模块有用户session分析，页面单跳转化率统计，热门商品离线统计，广告流量实时统计等4个业务模块。
+6.主要的功能模块有用户session分析，热门商品离线统计等2个业务模块。
 
-7.所使用的知识点是spark core，spark SQL，spark streaming等三个技术框架。
+7.所使用的知识点是spark core，spark SQL，spark 等三个技术框架。
 
-8.主要是数据倾斜，线上故障，性能调优，troubleshooting等经验。
+8.使用模拟数据,希望达到的效果。
 
-9.使用模拟数据,希望达到的效果。
-
-10.需求分析，方案设计，数据设计，编码实现，测试以及性能调优等环节。
+9.需求分析，方案设计，数据设计，编码实现，测试以及性能调优等环节。
 
 ## 模块简介
 
 1、用户访问session分析：该模块主要是对用户访问session进行统计分析，包括session的聚合指标计算、按时间比例随机抽取session、获取每天点击、下单和购买排名前10的品类、并获取top10品类的点击量排名前10的session。该模块可以让产品经理、数据分析师以及企业管理层形象地看到各种条件下的具体用户行为以及统计指标，从而对公司的产品设计以及业务发展战略做出调整。主要使用Spark Core实现。
 
-2、页面单跳转化率统计：该模块主要是计算关键页面之间的单步跳转转化率，涉及到页面切片算法以及页面流匹配算法。该模块可以让产品经理、数据分析师以及企业管理层看到各个关键页面之间的转化率，从而对网页布局，进行更好的优化设计。主要使用Spark Core实现。
 
-3、热门商品离线统计：该模块主要实现每天统计出各个区域的top3热门商品。然后使用Oozie进行离线统计任务的定时调度；使用Zeppeline进行数据可视化的报表展示。该模块可以让企业管理层看到公司售卖的商品的整体情况，从而对公司的商品相关的战略进行调整。主要使用Spark SQL实现。
-
-4、广告流量实时统计：该模块负责实时统计公司的广告流量，包括广告展现流量和广告点击流量。实现动态黑名单机制，以及黑名单过滤；实现滑动窗口内的各城市的广告展现流量和广告点击流量的统计；实现每个区域每个广告的点击流量实时统计；实现每个区域top3点击量的广告的统计。主要使用Spark Streaming实现。
 
 ## 用户访问Session分析模块
 
@@ -46,11 +40,7 @@
 
 5.开发完毕了以上功能以后，需要进行大量，复杂，高端，全套的性能调优。
 
-6.10亿数据量的troubleshooting的经验总结
-
-7.数据倾斜的完美解决方案，数据倾斜往往是大数据处理程序的性能杀手。
-
-8.把使用moc的数据，对模块进行处理，调试。
+6.把使用moc的数据，对模块进行处理，调试。
 
 ## 实际架构
 
@@ -60,7 +50,7 @@
 
 3.spark作业统计和分析的结果，会写入mySQL中，指定的表。
 
-4.最后通过Javaee进行结果展示。
+4.最后通过springboot进行结果展示。
 
 ## 用户访问session介绍
 
@@ -144,6 +134,7 @@ task_status：任务状态，任务对应的就是一次Spark作业的运行，�
 task_param：最最重要，用来使用JSON的格式，来封装用户提交的任务对应的特殊的筛选参数.
 
 ### 总体任务的流程
+
 ![项目整个流程](任务总体流程.png)
 ## 用户访问Session分析需求分析
 ## 需求分析
@@ -253,19 +244,20 @@ task_param：最最重要，用来使用JSON的格式，来封装用户提交的
       `60` double DEFAULT NULL,
       PRIMARY KEY (`task_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8
-    
+
 
 第二个表：session_random_extract表，存储我们的按时间比例随机抽取功能抽取出来的1000个session
 
     CREATE TABLE `session_random_extract` (
-      `task_id` int(11) NOT NULL,
-      `session_id` varchar(255) DEFAULT NULL,
-      `start_time` varchar(50) DEFAULT NULL,
-      `end_time` varchar(50) DEFAULT NULL,
-      `search_keywords` varchar(255) DEFAULT NULL,
-      PRIMARY KEY (`task_id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8
-    
+    `task_id` int(11) NOT NULL,
+    `session_id` varchar(255) NOT NULL,
+    `start_time` varchar(50) DEFAULT NULL,
+    `end_time` varchar(50) DEFAULT NULL,
+    `search_keywords` varchar(255) DEFAULT NULL,
+    `click_category_ids` varchar(255) DEFAULT NULL,  -- 建议顺便加上这个字段，记录用户点的品类
+    PRIMARY KEY (`task_id`, `session_id`)           -- 复合主键
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 
 第三个表：top10_category表，存储按点击、下单和支付排序出来的top10品类数据
 
@@ -277,7 +269,7 @@ task_param：最最重要，用来使用JSON的格式，来封装用户提交的
       `pay_count` int(11) DEFAULT NULL,
       PRIMARY KEY (`task_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-    
+
 
 第四个表：top10_category_session表，存储top10每个品类的点击top10的session
 
@@ -288,7 +280,7 @@ task_param：最最重要，用来使用JSON的格式，来封装用户提交的
       `click_count` int(11) DEFAULT NULL,
        PRIMARY KEY (`task_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-    
+
 
 最后一张表：session_detail，用来存储随机抽取出来的session的明细数据、top10品类的session的明细数据
 
@@ -307,7 +299,7 @@ task_param：最最重要，用来使用JSON的格式，来封装用户提交的
       `pay_product_ids` varchar(255) DEFAULT NULL,
       PRIMARY KEY (`task_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-    
+
 
 额外的一张表：task表，用来存储J2EE平台插入其中的任务的信息
 
@@ -322,7 +314,7 @@ task_param：最最重要，用来使用JSON的格式，来封装用户提交的
       `task_param` text,
       PRIMARY KEY (`task_id`)
     ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
-    
+
 
 完成了数据调研、需求分析、技术方案设计、数据设计以后，正式进入编码实现和功能测试阶段。最后才是性能调优阶段。 
 ## 编码以及实现思路
@@ -375,7 +367,7 @@ Top10的数据相Join然后计算每一个品类的点击次数，在根据Categ
 Spark并行度，其实就是指的是spark作业中，各个stage的task数量，也就代表了spark作业的各个阶段的并行度。
 
 如果不调节，并行度，导致并行度过低，会怎么样？
-   
+
    你的资源虽然分配足够了，但是问题是并行度没有与资源想匹配，导致你的资源分配浪费。
 
 合理的并行度的设置，应该是要设置的足够大，大到可以完全合理的利用你的集群资源。
@@ -394,26 +386,26 @@ Spark并行度，其实就是指的是spark作业中，各个stage的task数量�
 对于这种情况，是一定要避免的，一旦出现一个RDD重复计算，就会导致性能急剧降低。
 
 2.RDD架构重构优化
-   
+
   尽量去复用RDD，差不多的RDD，可以抽取成为一个共同的RDD供后面的RDD计算，反复使用。
 
 公共的RDD一定要实现持久化。持久化也就是说，将RDD的数据缓存到内存或者磁盘中，之后无论进行多少次计算，都直接取这个RDD的持久化的数据。
-  
+
   持久化，是可以进行序列化的。如果正常将持久化在内存，那么可能会导致内存的占用过大，这样的话，会知道内存溢出。
-  
+
   当内存无法支持公共RDD数量完全存放的时候，就优先考虑，使用序列化的方式在存内存存储。序列化的方式，唯一的缺点是在获取数据的时候，需要到反序列化。
-  
+
   如果序列化纯内存，只能内存+磁盘的序列化方式。
-  
+
   为了数据的高可靠性，而且内存充足可以使用双副本，进行持久化。持久化的双副本机制，因为机器宕机了，副本就丢了，需要重复机制，但是这样是针对你的资源很充分。
 ### 性能调优之在实际项目中广播大变量
-  
+
   默认情况下，task执行的算子中，使用外部的变量，每个task都会获取一份变量，有什么缺点？在什么情况下会出现性能上的优劣影响？
-  
+
   每一个task出现一份变量，极其消耗内存，有可能导致堆内存不足，频繁GC，以及RDD持久化部分写入到磁盘，从而导致磁盘IO的消耗等。
 
 如何解决上述性能影响呢？
-   
+
    广播变量。广播变量在driver上会有一份初始的副本，第一个executor都有一个BlockManager负责管理某个内存和磁盘上的数据，
 
 这个会在driver上拉去相应的广播变量，有可能会从远层的driver上获取变量副本，也有可能从距离比较近的其他节点获取。
@@ -451,7 +443,7 @@ Spark应用fastutil
 ### 性能调优之调节数据本地化等待时间
    spark的task分配算法，优先会希望每个task正好分配到它要计算的数据所在的节点，这样就不用在网络间传输数据。但是，一般是事与愿违，通常spark还会等待一段时间，默认情况下是3秒，如果不行，就会选择这个比较差的本地化级别，比如说将task分配到靠它要计算的数据所在的节点在比较近的一个节点，然后进行计算。
 如果发生数据传输，task会通过其所在节点的BlockManager来获取数据，通过一个getRemote方法，通过网络传输组件从数据所在的节点的BlockManager中，获取数据通过网络传输回task所在的节点进行计算。
-  
+
    最佳情况，task和BlockManager直接在一个executor进程内，走内存速度最佳;同一机架，不在一个节点，需要网络传输;在一个节点，多个executor之间数据传输;不同机架，跨机架之间的网络传输，这种情况对性能的影响非常大。
 
 PROCESS_LOCAL:进程本地化，代码和数据在同一进程，也就是同一个executor，计算的task由executor执行，BlockManager中有数据，性能最好。
@@ -753,19 +745,19 @@ spark.shuffle.io.retryWait 5s
 **1.数据倾斜的原理**
 
    spark进行shuffle时，由于数据分配不均匀，导致某个Task的数据过大，这个Task运行时间过长，这就是数据倾斜。
-   
+
 **2.数据倾斜的现象**
 
    spark数据倾斜，有两种表现:
-   
+
    1.大部分的task，都执行的特别特别快，有几个task执行的特别特别慢，前面的task一般1s可以执行完5个，后面发现1000个task，999task要执行1小时或者2小时才能执行完一个task
       
    2.运行的时候，其他task执行造成，没有什么问题，但是有的task，就突然出现OOM，task failed，task lost反复执行几次都是某个task跑不通，最后挂掉。
-   
+
 **3.数据倾斜的产生原因与定位**
 
    根据log去定位，出现出现数据倾斜的原因，基本只可能因为出现了shuffle操作的在shuffle的过程中，出现了数据倾斜的问题。因为某个，或者某些key对应的数据，远高于其他key。
- 
+
    1.在程序中找到产生shuffle得算子
 
    2.看log，log一般会报你的哪一行代码，导致OOM异常，看看执行到第几个stage。
